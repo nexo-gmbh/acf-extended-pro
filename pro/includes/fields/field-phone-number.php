@@ -481,7 +481,7 @@ class acfe_field_phone_number extends acf_field{
         // simple phones
         }else{
     
-            $phones = acfe_include('pro/includes/data/phones.php');
+            $phones = acfe_include('pro/includes/data/phones.php', false);
             $number = str_replace('+', '', $value);
             $storage = array();
     

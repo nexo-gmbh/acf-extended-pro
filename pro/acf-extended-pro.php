@@ -41,6 +41,7 @@ class ACFE_Pro{
         acfe_include('pro/includes/acfe-payment-functions.php');
         acfe_include('pro/includes/acfe-script-functions.php');
         acfe_include('pro/includes/acfe-world-functions.php');
+        acfe_include('pro/includes/google-map.php');
         acfe_include('pro/includes/payment.php');
         acfe_include('pro/includes/world.php');
         
@@ -178,6 +179,7 @@ class ACFE_Pro{
      */
     function include_field_types(){
         
+        acfe_include('pro/includes/fields/field-address.php');
         acfe_include('pro/includes/fields/field-block-editor.php');
         acfe_include('pro/includes/fields/field-block-types.php');
         acfe_include('pro/includes/fields/field-countries.php');

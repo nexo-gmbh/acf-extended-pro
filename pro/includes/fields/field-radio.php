@@ -159,7 +159,7 @@ class acfe_pro_field_radio extends acfe_field_extend{
             $field_type = $field['type'];
             $field_name = $field['_name'];
             $field_input = '<input ' . acf_esc_atts($atts) . '/>';
-            $choice_render = $field_input  . $label;
+            $choice_render = $field_input  . acf_esc_html($label);
             
             // buffer
             ob_start();
@@ -175,9 +175,7 @@ class acfe_pro_field_radio extends acfe_field_extend{
     
             // append
             if(!empty($buffer)){
-                
                 $choice_render = $buffer;
-                
             }
             
             // render

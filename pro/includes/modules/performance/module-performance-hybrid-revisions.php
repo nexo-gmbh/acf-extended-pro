@@ -8,14 +8,96 @@ if(!class_exists('acfe_pro_performance_hybrid_revisions')):
 
 class acfe_pro_performance_hybrid_revisions{
     
+    var $copy_revision = false;
+    
+    /**
+     * hybdrid engine
+     * revision meta structure:
+     *
+     *  text     = my value
+     * _text     = field_6726aa0880d0a
+     *  textarea = my value
+     * _textarea = field_6726aa0b80d0b
+     *
+     * this is because acf copy post meta into revision in acf_copy_postmeta()
+     * using acf_update_metadata() with $hidden = false
+     * this bypass the logic in the hybrid_engine->pre_update_metadata()
+     *
+     */
+    
     /**
      * construct
      */
     function __construct(){
         
-        add_filter('_wp_post_revision_fields', array($this, 'wp_post_revision_fields'), 9, 2);
+        add_action('wp_restore_post_revision',      array($this, 'wp_restore_post_revision'),      9, 2);
+        add_action('wp_restore_post_revision_late', array($this, 'wp_restore_post_revision_late'), 11, 2);
+        add_filter('acf/pre_update_metadata',       array($this, 'pre_update_metadata'),           10, 5);
+        add_filter('_wp_post_revision_fields',      array($this, 'wp_post_revision_fields'),       9, 2);
         
     }
+    
+    
+    /**
+     * wp_restore_post_revision
+     *
+     * @param $post_id
+     * @param $revision_id
+     *
+     * @return void
+     */
+    function wp_restore_post_revision($post_id, $revision_id){
+        if(acfe_get_object_performance_engine_name($post_id) === 'hybrid'){
+            $this->copy_revision = true;
+        }
+    }
+    
+    
+    /**
+     * wp_restore_post_revision_late
+     *
+     * @param $post_id
+     * @param $revision_id
+     *
+     * @return void
+     */
+    function wp_restore_post_revision_late($post_id, $revision_id){
+        if(acfe_get_object_performance_engine_name($post_id) === 'hybrid'){
+            $this->copy_revision = false;
+        }
+    }
+    
+    
+    /**
+     * pre_update_metadata
+     *
+     * @param $return
+     * @param $post_id
+     * @param $name
+     * @param $value
+     * @param $hidden
+     *
+     * @return mixed|true
+     */
+    function pre_update_metadata($return, $post_id, $name, $value, $hidden){
+        
+        // in acf_copy_postmeta()
+        // acf uses update_metadata() with $hidden = false on all meta from revision
+        // we need to prevent saving meta references when restoring a revision
+        if($this->copy_revision && acfe_get_object_performance_engine_name($post_id) === 'hybrid' && !$hidden){
+            
+            // do not save
+            // _my_field = field_abcd1234
+            if(acfe_starts_with($name, '_') && acf_is_field_key($value)){
+                return true;
+            }
+            
+        }
+        
+        return $return;
+    
+    }
+    
     
     /**
      * wp_post_revision_fields
@@ -46,10 +128,23 @@ class acfe_pro_performance_hybrid_revisions{
         
         }
         
-        // acf uses get_post_meta() to retrieve acf meta in
-        // advanced-custom-fields-pro/includes/revisions.php:151
-        // we need to hook in to retrieve the _acf metaref and make it look like normal meta
-        add_filter('get_post_metadata', array($this, 'get_post_metadata'), 10, 5);
+        $post_id = acf_maybe_get($post, 'ID');
+        
+        // compatibility with WP < 4.5 (test)
+        if(!$post_id){
+            global $post;
+            $post_id = $post->ID;
+        }
+        
+        // validate engine of parent post_id
+        if(acfe_get_object_performance_engine_name($post_id) === 'hybrid'){
+            
+            // acf uses get_post_meta() to retrieve acf meta in
+            // advanced-custom-fields-pro/includes/revisions.php:212
+            // we need to hook in to retrieve the '_acf' metaref and make it look like normal meta
+            add_filter('get_post_metadata', array($this, 'get_post_metadata'), 10, 5);
+            
+        }
         
         // return
         return $fields;
@@ -74,8 +169,6 @@ class acfe_pro_performance_hybrid_revisions{
         if(!empty($meta_key)){
             return $null;
         }
-        
-        // todo: get $object_id (revision) ->parent (real post) and check if performance is enabled on it
         
         // copied from get_metadata_raw() in
         // wp-includes/meta.php:641

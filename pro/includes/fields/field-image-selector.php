@@ -189,7 +189,7 @@ class acfe_field_image_selector extends acf_field{
      */
     function render_field($field){
         
-        // Set Field Type
+        // set field type
         $field['type'] = $field['multiple'] ? 'checkbox' : 'radio';
         $field['toggle'] = false;
         $field['allow_custom'] = false;
@@ -199,18 +199,18 @@ class acfe_field_image_selector extends acf_field{
             $field['value'] = acfe_unarray($field['value']);
         }
         
-        // Vars
+        // vars
         $choices = array();
         $data = acfe_get_registered_image_sizes($field['image_size']);
         
-        // Data
+        // data
         $width = $data['width'];
         $height = $data['height'] ? $data['height'] : $width;
         
         $width = $field['width'] ? $field['width'] : $width;
         $height = $field['height'] ? $field['height'] : $height;
         
-        // Border
+        // border
         $border = $field['border'] ? $field['border'] : 0;
         
         if($field['choices']){
@@ -235,21 +235,22 @@ class acfe_field_image_selector extends acf_field{
                     
                 }
                 
-                // Extension
-                $path = pathinfo($url);
-                $ext = acf_maybe_get($path, 'extension');
+                // extension
+                $ext = acfe_get_file_extension($url);
                 
-                // Style
-                $style = "background-image:url({$url}); width:{$width}px; height:{$height}px; border-width:{$border}px";
-                
-                // Atts
-                $atts = array(
-                    'class' => "image {$ext}",
-                    'style' => $style
+                // wrapper
+                $wrapper = array(
+                    'class' => "image {$ext} {$value}",
+                    'style' => "width:{$width}px;height:{$height}px;border-width:{$border}px"
                 );
                 
-                // Choice
-                $choices[$value] = '<div ' . acf_esc_atts($atts) . '></div>';
+                // img
+                $img = array(
+                    'src' => $url,
+                );
+                
+                // choice
+                $choices[ $value ] = '<div ' . acf_esc_atts($wrapper) . '><img ' . acf_esc_atts($img) . ' /></div>';
                 
             }
             
@@ -258,9 +259,9 @@ class acfe_field_image_selector extends acf_field{
         $field['choices'] = $choices;
         
         $atts = array(
-            'class'             => "acfe-image-selector {$field['class']}",
-            'data-allow_null'   => $field['allow_null'],
-            'data-multiple'     => $field['multiple'],
+            'class'           => "acfe-image-selector {$field['class']}",
+            'data-allow_null' => $field['allow_null'],
+            'data-multiple'   => $field['multiple'],
         );
         
         ?>

@@ -397,6 +397,398 @@
         return;
     }
 
+    // vars
+    var loading = false;
+    var geocoder = false;
+
+    acfe.withAPI = function(callback) {
+
+        // Check if geocoder exists.
+        if (window.geocoder) {
+            return callback();
+        }
+
+        // Check if geocoder API exists.
+        if (acf.isset(window, 'google', 'maps', 'Geocoder')) {
+            window.geocoder = new google.maps.Geocoder();
+            return callback();
+        }
+
+        // Geocoder will need to be loaded. Hook callback to action.
+        acf.addAction('google_map_api_loaded', callback);
+
+        // Bail early if already loading API.
+        if (loading) {
+            return;
+        }
+
+        // load api
+        var url = acf.get('google_map_api');
+        if (url) {
+            // Set loading status.
+            loading = true;
+
+            // Load API
+            $.ajax({
+                url: url,
+                dataType: 'script',
+                cache: true,
+                success: function() {
+                    window.geocoder = new google.maps.Geocoder();
+                    acf.doAction('google_map_api_loaded');
+                }
+            });
+        }
+
+    };
+
+})(jQuery);
+(function($) {
+
+    if (typeof acf === 'undefined' || typeof acfe === 'undefined') {
+        return;
+    }
+
+    /**
+     * Field: Address
+     *
+     * https://stackoverflow.com/a/46587310
+     * https://stackoverflow.com/a/49672234 prediction modal
+     * https://developers.google.com/maps/documentation/javascript/place-autocomplete#javascript_4
+     */
+    var Address = acf.models.GoogleMapField.extend({
+
+        type: 'acfe_address',
+
+        wait: false,
+
+        $control: function() {
+            return this.$('.acfe-address');
+        },
+
+        initialize: function() {
+
+            // Ensure Google API is loaded and then initialize map.
+            acfe.withAPI(this.initializeAddress.bind(this));
+
+        },
+
+        initializeAddress: function() {
+
+            var self = this;
+
+            if (acf.isset(google, 'maps', 'places', 'Autocomplete')) {
+
+                var autocompleteArgs = {};
+
+                if (this.get('countries').length) {
+                    autocompleteArgs.componentRestrictions = {
+                        country: this.get('countries')
+                    };
+                }
+
+                if (this.get('search_type')) {
+                    autocompleteArgs.types = [this.get('search_type')];
+                }
+
+                // filters
+                autocompleteArgs = acf.applyFilters(`acfe/fields/address/args`, autocompleteArgs, this);
+                autocompleteArgs = acf.applyFilters(`acfe/fields/address/args/name=${this.get('name')}`, autocompleteArgs, this);
+                autocompleteArgs = acf.applyFilters(`acfe/fields/address/args/key=${this.get('key')}`, autocompleteArgs, this);
+
+                // instantiate
+                autocomplete = new google.maps.places.Autocomplete(this.$search()[0], autocompleteArgs);
+
+                // add listener
+                autocomplete.addListener('place_changed', function() {
+                    var place = this.getPlace();
+                    self.searchPlace(place);
+                });
+
+                acf.doAction(`acfe/fields/address/init`, autocomplete, this);
+                acf.doAction(`acfe/fields/address/init/name=${this.get('name')}`, autocomplete, this);
+                acf.doAction(`acfe/fields/address/init/key=${this.get('key')}`, autocomplete, this);
+
+            }
+
+        },
+
+        onFocusSearch: function(e, $el) {
+            if ($el.val()) {
+                this.setState('searching');
+            }
+        },
+
+        onKeydownSearch: function(e, $el) {
+            if (e.which == 13) {
+                e.preventDefault();
+                $el.blur();
+            }
+
+            if ($el.val()) {
+                this.setState('searching');
+            }
+        },
+
+        onBlurSearch: function(e, $el) {
+
+            if (!this.val() && !this.get('custom_address')) {
+                $el.val('');
+            }
+
+            // Get saved address value.
+            var val = this.val();
+            var address = val ? val.address : '';
+
+            // Remove 'is-searching' if value has not changed.
+            if ($el.val() === address) {
+                this.setState('default');
+            } else {
+                $el.val(address);
+            }
+
+        },
+
+        searchPlace: function(place) {
+            // console.log('searchPlace', place);
+
+            // Bail early if no place.
+            if (!place) {
+                return;
+            }
+
+            // Selecting from the autocomplete dropdown will return a rich PlaceResult object.
+            // Be sure to over-write the "formatted_address" value with the one displayed to the user for best UX.
+            if (place.geometry) {
+
+                place.formatted_address = this.$search().val();
+                var val = this.parseResult(place);
+                this.val(val);
+
+                // Searching a custom address will return an empty PlaceResult object.
+            } else if (place.name) {
+
+                // only if custom address enabled
+                if (this.get('custom_address')) {
+                    this.searchAddress(place.name);
+
+                    // otherwise reset value
+                } else {
+                    this.val('');
+                }
+
+            }
+        },
+
+        setState: function(state) {
+
+            // Remove previous state classes.
+            this.$control().removeClass('-value -loading -searching');
+
+            // Determine auto state based of current value.
+            if (state === 'default') {
+                state = this.val() ? 'value' : '';
+            }
+
+            // Update state class.
+            if (state) {
+                this.$control().addClass('-' + state);
+            }
+
+            if (state === 'searching') {
+                $('body > .pac-container').addClass('acfe-address-pac');
+            } else {
+                $('body > .pac-container').removeClass('acfe-address-pac');
+            }
+
+        },
+
+        renderVal: function(val) {
+
+            // Value.
+            if (val) {
+
+                this.setState('');
+                this.$search().val(val.address);
+
+                // No value.
+            } else {
+                this.setState('');
+                this.$search().val('');
+            }
+        },
+
+        searchPosition: function(lat, lng) {
+            //console.log('searchPosition', lat, lng );
+
+            // Start Loading.
+            this.setState('loading');
+
+            // Query Geocoder.
+            var latLng = {
+                lat: lat,
+                lng: lng
+            };
+
+            geocoder.geocode({
+                location: latLng
+            }, function(results, status) {
+                //console.log('searchPosition', arguments );
+
+                // End Loading.
+                this.setState('');
+
+                // Status failure.
+                if (status !== 'OK') {
+                    this.showNotice({
+                        text: acf.__('Location not found: %s').replace('%s', status),
+                        type: 'warning'
+                    });
+
+                    // Success.
+                } else {
+                    var val = this.parseResult(results[0]);
+
+                    // Override lat/lng to match user defined marker location.
+                    // Avoids issue where marker "snaps" to nearest result.
+                    val.lat = lat;
+                    val.lng = lng;
+
+                    // display the result in autocompleter in case of business/cities/regions
+                    if (this.get('search_type') && this.get('search_type') !== 'geocode' && this.get('search_type') !== 'address') {
+
+                        this.$search().val(val.address);
+                        this.$search().trigger('focus');
+
+                        // otherwise: update value
+                    } else {
+                        this.val(val);
+                    }
+
+                }
+            }.bind(this));
+        },
+
+        searchAddress: function(address) {
+
+            // console.log('searchAddress', address );
+
+            // Bail early if no address.
+            if (!address) {
+                return;
+            }
+
+            // Allow "lat,lng" search.
+            var latLng = address.split(',');
+            if (latLng.length === 2) {
+                var lat = parseFloat(latLng[0]);
+                var lng = parseFloat(latLng[1]);
+                if (lat && lng) {
+                    return this.searchPosition(lat, lng);
+                }
+            }
+
+            // Start Loading.
+            this.setState('loading');
+
+            // Query Geocoder.
+            geocoder.geocode({
+                address: address
+            }, function(results, status) {
+                //console.log('searchPosition', arguments );
+
+                // End Loading.
+                this.setState('');
+
+                // Status failure.
+                if (status !== 'OK') {
+                    this.showNotice({
+                        text: acf.__('Location not found: %s').replace('%s', status),
+                        type: 'warning'
+                    });
+
+                    // Success.
+                } else {
+                    var val = this.parseResult(results[0]);
+
+                    // Override address data with parameter allowing custom address to be defined in search.
+                    val.address = address;
+
+                    // Update value.
+                    this.val(val);
+                }
+            }.bind(this));
+        },
+
+        parseResult: function(obj) {
+            // Construct basic data.
+            var result = {
+                address: obj.formatted_address,
+                lat: obj.geometry.location.lat(),
+                lng: obj.geometry.location.lng()
+            };
+
+            // Add place ID.
+            if (obj.place_id) {
+                result.place_id = obj.place_id;
+            }
+
+            // Add place name.
+            if (obj.name) {
+                result.name = obj.name;
+            }
+
+            // Create search map for address component data.
+            var map = {
+                street_number: ['street_number'],
+                street_name: ['street_address', 'route'],
+                city: ['locality', 'postal_town'],
+                state: ['administrative_area_level_1', 'administrative_area_level_2', 'administrative_area_level_3', 'administrative_area_level_4', 'administrative_area_level_5'],
+                post_code: ['postal_code'],
+                country: ['country']
+            };
+
+            // Loop over map.
+            for (var k in map) {
+                var keywords = map[k];
+
+                // Loop over address components.
+                for (var i = 0; i < obj.address_components.length; i++) {
+                    var component = obj.address_components[i];
+                    var component_type = component.types[0];
+
+                    // Look for matching component type.
+                    if (keywords.indexOf(component_type) !== -1) {
+                        // Append to result.
+                        result[k] = component.long_name;
+
+                        // Append short version.
+                        if (component.long_name !== component.short_name) {
+                            result[k + '_short'] = component.short_name;
+                        }
+                    }
+                }
+            }
+
+            result = acf.applyFilters(`acfe/fields/address/result`, result, obj, this.map, this);
+            result = acf.applyFilters(`acfe/fields/address/result/name=${this.get('name')}`, result, obj, this.map, this);
+            result = acf.applyFilters(`acfe/fields/address/result/key=${this.get('key')}`, result, obj, this.map, this);
+
+            return result;
+
+        },
+
+    });
+
+    acf.registerFieldType(Address);
+
+})(jQuery);
+(function($) {
+
+    if (typeof acf === 'undefined' || typeof acfe === 'undefined') {
+        return;
+    }
+
     /**
      * Field: Block Editor
      */
@@ -721,11 +1113,10 @@
 
             if ($el.hasClass('selected')) {
 
-                if (!this.get('allow_null'))
-                    return;
-
-                this.updateValue('');
-                $el.removeClass('selected');
+                if (this.get('allow_null')) {
+                    this.updateValue('');
+                    $el.removeClass('selected');
+                }
 
             } else {
 
@@ -912,6 +1303,23 @@
 
         type: 'acfe_date_range_picker',
 
+        events: {
+            'keyup input[type="text"]': 'onKeyupInput',
+            'click .-close': 'onClickClose',
+        },
+
+        onKeyupInput: function(e, $el) {
+            if (this.get('allow_null') && !$el.val()) {
+                $el.data('daterangepicker').clickCancel();
+            }
+        },
+
+        onClickClose: function(e, $el) {
+            if (this.get('allow_null')) {
+                this.val('');
+            }
+        },
+
         $control: function() {
             return this.$('.acfe-date-range-picker');
         },
@@ -973,6 +1381,10 @@
                     val = daterangepicker.startDate.format(this.get('display_format'));
                 }
 
+                this.$control().addClass('-value');
+
+            } else {
+                this.$control().removeClass('-value');
             }
 
             // update date range picker
@@ -1130,15 +1542,11 @@
         },
 
         onApply: function(e, daterangepicker) {
-
             this.val(daterangepicker.startDate.format('YYYYMMDD') + '-' + daterangepicker.endDate.format('YYYYMMDD'));
-
         },
 
         onClear: function(e, daterangepicker) {
-
             this.val('');
-
         },
 
         addUnscopedEvents: function(self) {
@@ -2392,6 +2800,30 @@
     if (typeof acf === 'undefined' || typeof acfe === 'undefined') {
         return;
     }
+
+
+    /**
+     * Field: Google Map
+     */
+    var GoogleMap = acf.models.GoogleMapField;
+
+    acf.models.GoogleMapField = GoogleMap.extend({
+
+        setState: function(state) {
+
+            GoogleMap.prototype.setState.apply(this, arguments);
+
+            // change google places popup class
+            if (state === 'searching') {
+                $('body > .pac-container').addClass('acf-google-map-pac');
+            } else {
+                $('body > .pac-container').removeClass('acf-google-map-pac');
+            }
+
+        },
+
+    });
+
 
     /**
      * Field: Google Map

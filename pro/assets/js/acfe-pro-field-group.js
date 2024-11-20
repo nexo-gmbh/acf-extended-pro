@@ -455,11 +455,21 @@
             'new_field/name=acfe_google_map_disable_streetview': 'mapDisableStreetview',
         },
 
+        getParentSelector: function() {
+            if (acfe.versionCompare(acf.get('acf_version'), '>=', '6.0')) {
+                return '.acf-field-type-settings';
+            }
+
+            return 'tbody.acf-field-settings';
+        },
+
         getGoogleMap: function(field) {
-            return acf.getInstance(field.$el.closest('tbody.acf-field-settings').find('> .acf-field-setting-default_value'));
+            return acf.getInstance(field.$el.closest(this.getParentSelector()).find('> .acf-field-setting-default_value'));
         },
 
         mapInit: function(map, marker, field) {
+
+            var self = this;
 
             if (field.get('name') !== 'default_value') {
                 return;
@@ -467,7 +477,7 @@
 
             google.maps.event.addListener(map, 'zoom_changed', function() {
 
-                var zoom = acf.getInstance(field.$el.closest('tbody.acf-field-settings').find('> .acf-field-setting-acfe_google_map_zooms > .acf-input > .acf-fields > .acf-field-zoom'));
+                var zoom = acf.getInstance(field.$el.closest(self.getParentSelector()).find('> .acf-field-setting-acfe_google_map_zooms > .acf-input > .acf-fields > .acf-field-zoom'));
 
                 mapEvent = true;
 
@@ -479,8 +489,8 @@
 
             google.maps.event.addListener(map, 'center_changed', function() {
 
-                var $center_lat = field.$el.closest('tbody.acf-field-settings').find('> .acf-field-setting-center_lat > .acf-input > ul > li:eq(0) input');
-                var $center_lng = field.$el.closest('tbody.acf-field-settings').find('> .acf-field-setting-center_lat > .acf-input > ul > li:eq(1) input');
+                var $center_lat = field.$el.closest(self.getParentSelector()).find('> .acf-field-setting-center_lat > .acf-input > ul > li:eq(0) input');
+                var $center_lng = field.$el.closest(self.getParentSelector()).find('> .acf-field-setting-center_lat > .acf-input > ul > li:eq(1) input');
 
                 $center_lat.val(map.getCenter().lat()).change();
                 $center_lng.val(map.getCenter().lng()).change();
@@ -489,7 +499,7 @@
 
             google.maps.event.addListener(map, 'maptypeid_changed', function() {
 
-                var map_type = acf.getInstance(field.$el.closest('tbody.acf-field-settings').find('> .acf-field-setting-acfe_google_map_type'));
+                var map_type = acf.getInstance(field.$el.closest(self.getParentSelector()).find('> .acf-field-setting-acfe_google_map_type'));
 
                 map_type.val(map.getMapTypeId());
 
@@ -577,6 +587,7 @@
 
         mapMarkerIcon: function(field) {
 
+            var self = this;
             var preview = this.getGoogleMap(field);
 
             if (!preview)
@@ -590,8 +601,8 @@
 
                     var url = field.$('img').attr('src');
 
-                    var $height = field.$el.closest('tbody.acf-field-settings').find('> .acf-field-setting-acfe_google_map_marker_height > .acf-input > ul > li:eq(0) input');
-                    var $width = field.$el.closest('tbody.acf-field-settings').find('> .acf-field-setting-acfe_google_map_marker_height > .acf-input > ul > li:eq(1) input');
+                    var $height = field.$el.closest(self.getParentSelector()).find('> .acf-field-setting-acfe_google_map_marker_height > .acf-input > ul > li:eq(0) input');
+                    var $width = field.$el.closest(self.getParentSelector()).find('> .acf-field-setting-acfe_google_map_marker_height > .acf-input > ul > li:eq(1) input');
 
                     var height = parseInt($height.val());
                     var width = parseInt($width.val());
@@ -614,6 +625,7 @@
 
         mapMarkerSetSize: function(field) {
 
+            var self = this;
             var preview = this.getGoogleMap(field);
 
             if (!preview)
@@ -623,8 +635,8 @@
 
                 var icon = preview.map.marker.getIcon();
 
-                var $height = field.$el.closest('tbody.acf-field-settings').find('> .acf-field-setting-acfe_google_map_marker_height > .acf-input > ul > li:eq(0) input');
-                var $width = field.$el.closest('tbody.acf-field-settings').find('> .acf-field-setting-acfe_google_map_marker_height > .acf-input > ul > li:eq(1) input');
+                var $height = field.$el.closest(self.getParentSelector()).find('> .acf-field-setting-acfe_google_map_marker_height > .acf-input > ul > li:eq(0) input');
+                var $width = field.$el.closest(self.getParentSelector()).find('> .acf-field-setting-acfe_google_map_marker_height > .acf-input > ul > li:eq(1) input');
 
                 var height = parseInt($height.val());
                 var width = parseInt($width.val());

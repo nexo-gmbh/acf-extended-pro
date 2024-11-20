@@ -34,6 +34,8 @@ class acfe_field_date_range_picker extends acf_field{
             'min_date'          => '',
             'max_date'          => '',
             'custom_ranges'     => array(),
+            'prepend'           => '',
+            'append'            => '',
             'show_dropdowns'    => false,
             'no_weekends'       => false,
             'auto_close'        => false,
@@ -41,6 +43,8 @@ class acfe_field_date_range_picker extends acf_field{
         );
     
         $this->sub_fields = array('start', 'end');
+        
+        add_filter('acf/load_value', array($this, 'load_any_value'), 15, 3);
         
     }
     
@@ -218,6 +222,24 @@ class acfe_field_date_range_picker extends acf_field{
             )
         ));
         
+        // prepend
+        acf_render_field_setting($field, array(
+            'label'             => __('Prepend','acf'),
+            'instructions'      => __('Appears before the input','acf'),
+            'type'              => 'text',
+            'name'              => 'prepend',
+            'placeholder'       => '',
+        ));
+        
+        // append
+        acf_render_field_setting($field, array(
+            'label'             => __('Append','acf'),
+            'instructions'      => __('Appears after the input','acf'),
+            'type'              => 'text',
+            'name'              => 'append',
+            'placeholder'       => '',
+        ));
+        
         // show dropdowns
         acf_render_field_setting($field, array(
             'label'         => __('Show Dropdowns', 'acfe'),
@@ -355,6 +377,10 @@ class acfe_field_date_range_picker extends acf_field{
             }
             
         }
+        
+        if($field['value']){
+            $div['class'] .= ' -value';
+        }
     
         $hidden_input = array(
             'id'                => $field['id'],
@@ -369,9 +395,33 @@ class acfe_field_date_range_picker extends acf_field{
             'value'             => $display_value,
         );
         
+        // prepend text
+        if(!empty($field['prepend'])){
+            $text_input['class'] .= ' acf-is-prepended';
+        }
+        
+        // append text
+        if(!empty($field['append'])){
+            $text_input['class'] .= ' acf-is-appended';
+        }
+        
+        // prepend text
+        if(!empty($field['prepend'])){
+            echo '<div class="acf-input-prepend">' . acf_esc_html($field['prepend']) . '</div>';
+        }
+        
+        // append text
+        if(!empty($field['append'])){
+            echo '<div class="acf-input-append">' . acf_esc_html($field['append']) . '</div>';
+        }
+        
         // html
         ?>
         <div <?php echo acf_esc_atts($div); ?>>
+            
+            <?php if($field['allow_null']): ?>
+                <span class="-close">×</span>
+            <?php endif; ?>
             
             <?php acf_hidden_input($hidden_input); ?>
             <?php acf_text_input($text_input); ?>
@@ -392,7 +442,7 @@ class acfe_field_date_range_picker extends acf_field{
      * @return false
      */
     function update_value($value, $post_id, $field){
-    
+        
         // update sub field value
         if($this->is_sub_field($field)){
             return $value;
@@ -413,6 +463,7 @@ class acfe_field_date_range_picker extends acf_field{
     
         // clone
         $sub_field = $field;
+        $sub_field['type'] = 'text';
     
         // loop subfields
         foreach($this->sub_fields as $name){
@@ -420,19 +471,86 @@ class acfe_field_date_range_picker extends acf_field{
             // check if subfield value
             if(isset($value[ $name ])){
     
-                // assign new name "{group_date_picker}_{start}"
-                $sub_field['name'] = "{$field['name']}_{$name}";
-                $sub_value = acf_maybe_get($value, $name);
+                // assign new name "{date_range_picker}_{start}"
+                $sub_field['name']  = "{$field['name']}_{$name}";
+                $sub_field['_name'] = "{$field['_name']}_{$name}";
     
                 // update sub field
-                acf_update_value($sub_value, $post_id, $sub_field);
+                acf_update_value($value[ $name ], $post_id, $sub_field);
                 
             }
         
         }
         
         // save empty
-        return false;
+        return '';
+        
+    }
+    
+    
+    /**
+     * load_any_value
+     *
+     * Handle case for subfields when applying custom array value with 'acf/load_value/name=date_range_picker'
+     *
+     * @param $value
+     * @param $post_id
+     * @param $field
+     *
+     * @return mixed
+     */
+    function load_any_value($value, $post_id, $field){
+        
+        if(!$field || empty($field['type']) || $field['type'] !== $this->name){
+            return $value;
+        }
+        
+        // load sub field value
+        if($this->is_sub_field($field)){
+            
+            // get subfield name (start|end)
+            $sub_name = $this->is_sub_field($field);
+            
+            // check the value is an array
+            if($sub_name && is_array($value)){
+                return acf_maybe_get($value, $sub_name);
+            }
+            
+        }
+        
+        return $value;
+        
+    }
+    
+    
+    /**
+     * load_sub_field_value
+     *
+     * Handle case when using get_field('date_range_picker_start')
+     *
+     * @param $value
+     * @param $post_id
+     * @param $field
+     *
+     * @return mixed
+     */
+    function load_sub_field_value($value, $post_id, $field){
+        
+        // clone field
+        $sub_field = $field;
+        $sub_field['type'] = 'text'; // avoid calling itself again
+        
+        // get subfield name (start|end)
+        $sub_name = $this->is_sub_field($field);
+        
+        // modify subfield
+        $sub_field['name']  = $field['name'];
+        $sub_field['_name'] = "{$field['_name']}_{$sub_name}"; // for acf/load_value/name=date_range_picker_start
+        
+        // get value
+        $value = acf_get_value($post_id, $sub_field);
+        
+        return $value;
         
     }
     
@@ -444,33 +562,40 @@ class acfe_field_date_range_picker extends acf_field{
      * @param $post_id
      * @param $field
      *
-     * @return null[]
+     * @return mixed|null[]|string
      */
     function load_value($value, $post_id, $field){
-    
-        // load sub field value
-        if($this->is_sub_field($field)){
-            return $value;
-        }
-    
-        // clone
-        $sub_field = $field;
         
-        // default values
+        // load sub field value
+        // case: get_field('date_range_picker_start')
+        if($this->is_sub_field($field)){
+            return $this->load_sub_field_value($value, $post_id, $field);
+        }
+        
+        // load value
+        // case: get_field('date_range_picker')
         $values = array(
             'start' => null,
             'end'   => null,
         );
+        
+        // clone field
+        $sub_field = $field;
+        $sub_field['type'] = 'text'; // avoid calling itself again
     
         // loop subfields
-        foreach($this->sub_fields as $name){
-        
-            // assign new name "{group_date_picker}_{start}"
-            $sub_field['name'] = "{$field['name']}_{$name}";
+        foreach($this->sub_fields as $sub_name){
+            
+            // modify subfield
+            $sub_field['name']  = "{$field['name']}_{$sub_name}";
+            $sub_field['_name'] = "{$field['_name']}_{$sub_name}"; // for acf/load_value/name=date_range_picker_start
+            
+            // get value
             $sub_value = acf_get_value($post_id, $sub_field);
-        
+            
+            // value found
             if($sub_value){
-                $values[ $name ] = $sub_value;
+                $values[ $sub_name ] = $sub_value;
             }
         
         }
@@ -505,6 +630,11 @@ class acfe_field_date_range_picker extends acf_field{
                 
             }
             
+        }
+        
+        // return empty value if saved as empty
+        if($values['start'] === null && $values['end'] === null){
+            return '';
         }
         
         return $values;
@@ -574,12 +704,14 @@ class acfe_field_date_range_picker extends acf_field{
         
         // clone
         $sub_field = $field;
+        $sub_field['type'] = 'text';
         
         // loop subfields
         foreach($this->sub_fields as $name){
             
             // assign new name "{group_date_picker}_{start}"
-            $sub_field['name'] = "{$field['name']}_{$name}";
+            $sub_field['name']  = "{$field['name']}_{$name}";
+            $sub_field['_name'] = "{$field['_name']}_{$name}";
             
             // delete
             acf_delete_value($post_id, $sub_field);
@@ -587,6 +719,7 @@ class acfe_field_date_range_picker extends acf_field{
         }
         
     }
+    
     
     /**
      * convert PHP Date to MomentJS format
@@ -656,15 +789,12 @@ class acfe_field_date_range_picker extends acf_field{
      */
     function is_sub_field($field){
         
-        // try to retrieve real field name
-        $_name = acf_maybe_get($field, '_name');
-        
-        // loop sub fields
-        foreach($this->sub_fields as $sub_field){
+        // loop subfields names
+        foreach($this->sub_fields as $sub_name){
             
-            // ends with "{my_field}_{sub_field}"
-            if(acfe_ends_with($field['name'], "{$_name}_{$sub_field}")){
-                return $sub_field;
+            // ends with "{date_range_picker}_{start}"
+            if(acfe_ends_with($field['name'], "{$field['_name']}_{$sub_name}")){
+                return $sub_name;
             }
             
         }
@@ -683,6 +813,8 @@ class acfe_field_date_range_picker extends acf_field{
      */
     function translate_field($field){
         
+        $field['prepend'] = acf_translate($field['prepend']);
+        $field['append'] = acf_translate($field['append']);
         $field['placeholder'] = acf_translate($field['placeholder']);
         
         return $field;

@@ -45,6 +45,18 @@ class acfe_compatibility{
      * @since 0.8 (20/10/2019)
      */
     function acf_init(){
+        
+        /**
+         * acfe/flexible/render/template
+         *
+         * Remove temporary fix for preview get_row() usage provided for ACFE 0.9.0.8
+         */
+        remove_filter('acfe/flexible/render/template', 'acfe_fix_flexible_content_preview_get_row', 0);
+        
+        /***
+         * admin_body_class
+         */
+        add_filter('admin_body_class',  array($this, 'admin_body_class'));
     
         // settings list
         $settings = array(
@@ -76,6 +88,31 @@ class acfe_compatibility{
             }
             
         }
+        
+    }
+    
+    
+    /**
+     * admin_body_class
+     *
+     * Add class to admin body to fix acf postbox cog icon breaking line-height in WP 5.5
+     *
+     * @param $classes
+     *
+     * @return mixed|string
+     */
+    function admin_body_class($classes){
+        
+        if(!is_string($classes)){
+            return $classes;
+        }
+        
+        $version = (float) get_bloginfo('version');
+        if(acf_version_compare($version, '>=', '6.5')){
+            $classes .= ' acfe-fix-postboxes';
+        }
+        
+        return $classes;
         
     }
     
